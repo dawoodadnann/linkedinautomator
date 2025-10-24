@@ -40,13 +40,13 @@ async function waitForResults() {
 }
 
 (async () => {
-  console.log("✅ Content script running...");
+  console.log('✅ Downloader content script running...');
   const results = await waitForResults();
 
   if (results && results.length > 0) {
     console.log(`✅ Found ${results.length} Google results`);
-    chrome.runtime.sendMessage({ action: "downloadCSV", data: results });
+    chrome.runtime.sendMessage({ action: 'downloadCSV', data: results });
   } else {
-    alert("⚠️ No results found. Please make sure you're on a Google search results page!");
+    alert('⚠️ No results found on this page. Make sure you are on a Google search results page.');
   }
 })();

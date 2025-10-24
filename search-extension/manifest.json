@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Search Starter",
+  "version": "1.0",
+  "description": "Opens a Google search for LinkedIn posts with given keywords.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LinkedIn Search Starter"
+  }
+}

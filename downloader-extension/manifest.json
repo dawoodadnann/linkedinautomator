@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Google Search Results Downloader & LinkedIn Liker",
+  "version": "1.0",
+  "description": "Downloads Google search results to CSV and likes LinkedIn posts.",
+  "permissions": ["activeTab", "scripting", "downloads", "tabs", "storage"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Search Results Tool" },
+  "host_permissions": [
+    "https://www.google.com/*", 
+    "https://*.google.com/*",
+    "https://www.linkedin.com/*"
+  ]
+}

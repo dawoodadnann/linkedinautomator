@@ -1,16 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Google Search Scraper",
+  "name": "LinkedIn Keyword Search & Extractor",
   "version": "1.0",
-  "description": "Extracts Google search results and downloads as CSV",
-  "permissions": ["activeTab", "scripting", "downloads"],
-  "action": {
-    "default_popup": "popup.html"
+  "description": "Automatically searches Google for LinkedIn posts and extracts results into a CSV file.",
+  "permissions": ["activeTab", "scripting", "downloads", "tabs"],
+  "background": {
+    "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["https://www.google.com/search*"],
-      "js": ["content.js"]
-    }
-  ]
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LinkedIn Post Extractor"
+  },
+  "host_permissions": ["https://www.google.com/*", "https://*.google.com/*"]
 }

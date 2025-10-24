@@ -1,15 +1,30 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Google Scraper</title>
+    <title>LinkedIn Keyword Extractor</title>
     <style>
-      body { font-family: Arial; padding: 10px; width: 200px; }
-      button { width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; }
+      body {
+        font-family: Arial, sans-serif;
+        padding: 12px;
+        width: 220px;
+      }
+      button {
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 10px;
+        width: 100%;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      button:hover {
+        background-color: #357ae8;
+      }
     </style>
   </head>
   <body>
-    <h3>Extract Google Results</h3>
-    <button id="extractBtn">Extract Page 1</button>
+    <button id="searchBtn">Start Auto Search</button>
     <script src="popup.js"></script>
   </body>
 </html>

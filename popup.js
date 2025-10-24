@@ -1,39 +1,31 @@
-document.getElementById("extractBtn").addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+document.getElementById("searchBtn").addEventListener("click", () => {
+  const searchQuery =
+    'site:linkedin.com/posts ("Looking for Agency" OR "Need a marketing agency" OR "Hiring agency")';
 
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    function: extractGoogleResults
-  });
+  // Open Google search in a new tab
+  chrome.tabs.create(
+    { url: "https://www.google.com/search?q=" + encodeURIComponent(searchQuery) },
+    (tab) => {
+      // Wait 4 seconds, then inject content script
+      setTimeout(() => {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content.js"]
+        });
+      }, 4000);
+    }
+  );
 });
 
-function extractGoogleResults() {
-  // New structure used by Google as of 2025
-  const resultBlocks = [...document.querySelectorAll('.MjjYud, .g')];
+// Added button to like posts from CSV
+const likePostsBtn = document.createElement('button');
+likePostsBtn.id = 'likePostsBtn';
+likePostsBtn.innerText = 'Like Posts from CSV';
 
-  const data = resultBlocks.map(block => {
-    const link = block.querySelector('a')?.href || '';
-    const title = block.querySelector('h3')?.innerText || '';
-    const snippet = block.querySelector('.VwiC3b')?.innerText || '';
-    return { title, link, snippet };
-  }).filter(item => item.title && item.link); // keep only valid results
+// Append the button to the popup
+document.body.appendChild(likePostsBtn);
 
-  if (data.length === 0) {
-    alert("No results found. Please make sure you're on a Google search results page!");
-    return;
-  }
-
-  const csv = "Title,Link,Snippet\n" +
-    data.map(d =>
-      `"${d.title.replace(/"/g, '""')}","${d.link}","${d.snippet.replace(/"/g, '""')}"`
-    ).join("\n");
-
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "google_results.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
+likePostsBtn.addEventListener("click", () => {
+  const csvUrl = "path/to/your/google_results.csv"; // Update with the actual path to your CSV
+  chrome.runtime.sendMessage({ action: "likePostsFromCSV", csvUrl: csvUrl });
+});
