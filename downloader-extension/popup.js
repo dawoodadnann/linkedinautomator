@@ -44,3 +44,11 @@ document.getElementById("likePosts").addEventListener("click", () => {
   };
   reader.readAsText(file);
 });
+
+// --- Stop Engagement ---
+document.getElementById("stopEngagement").addEventListener("click", () => {
+  chrome.runtime.sendMessage({ action: "stopEngagement" });
+  alert("⏹️ Stopping engagement run...");
+});
+
+// DeepSeek key UI removed: use DEFAULT_DEEPSEEK_API_KEY in background.js

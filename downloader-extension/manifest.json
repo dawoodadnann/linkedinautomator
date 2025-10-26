@@ -9,6 +9,7 @@
   "host_permissions": [
     "https://www.google.com/*", 
     "https://*.google.com/*",
-    "https://www.linkedin.com/*"
+    "https://www.linkedin.com/*",
+    "https://api.deepseek.com/*"
   ]
 }
