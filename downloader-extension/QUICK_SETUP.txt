@@ -1,0 +1,68 @@
+╔════════════════════════════════════════════════════════════════╗
+║                  QUICK SETUP CHECKLIST                         ║
+╚════════════════════════════════════════════════════════════════╝
+
+Complete these steps to get your extension working:
+
+□ STEP 1: Set Up Google Apps Script
+  ├─ Open your Google Sheet:
+  │  https://docs.google.com/spreadsheets/d/1FZovCeVwPpH8Z9WMPkdigei1c6GxjRTUaZ2Xo34MnoY/edit
+  ├─ Go to Extensions → Apps Script
+  ├─ Copy code from GoogleAppsScript.gs
+  ├─ Paste into Apps Script editor
+  ├─ Save (Ctrl+S)
+  ├─ Deploy → New deployment → Web app
+  │  • Execute as: Me
+  │  • Who has access: Anyone
+  ├─ Click Deploy & Authorize
+  └─ COPY THE WEB APP URL ← IMPORTANT!
+
+□ STEP 2: Configure Extension
+  ├─ Open background.js in a text editor
+  ├─ Find: const GOOGLE_SHEETS_WEB_APP_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+  ├─ Replace "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE" with your Web App URL
+  └─ Save the file
+
+□ STEP 3: Reload Extension
+  ├─ Open Chrome and go to: chrome://extensions/
+  ├─ Find "Google Search Results Downloader & LinkedIn Liker"
+  └─ Click the Reload button (🔄)
+
+□ STEP 4: Test It!
+  ├─ Prepare a CSV file with LinkedIn post URLs
+  ├─ Click the extension icon
+  ├─ Click "Like Posts & Add Comments to Sheet"
+  ├─ Select your CSV file
+  └─ Watch it work! Comments will appear in your Google Sheet
+
+╔════════════════════════════════════════════════════════════════╗
+║                    WHAT THE EXTENSION DOES                     ║
+╚════════════════════════════════════════════════════════════════╝
+
+For each LinkedIn post in your CSV:
+  1. Opens the post in a new tab
+  2. Likes the post 👍
+  3. Extracts the post content
+  4. Generates a comment using DeepSeek AI 🤖
+  5. Adds Post Link + Comment to your Google Sheet 📊
+  6. Closes the tab
+  7. Moves to the next post
+  8. (Repeat until all posts are processed)
+
+You can click "Stop Process" at any time to pause.
+
+╔════════════════════════════════════════════════════════════════╗
+║                         NEED HELP?                             ║
+╚════════════════════════════════════════════════════════════════╝
+
+📖 Read GOOGLE_SHEETS_SETUP.md for detailed instructions
+📖 Read README.md for complete documentation
+📖 Read CHANGES_SUMMARY.md to see what changed
+
+🐛 Troubleshooting:
+   • Comments not appearing? Check the Web App URL in background.js
+   • Extension not loading? Reload it in chrome://extensions/
+   • Console errors? Press F12 to see detailed error messages
+
+═══════════════════════════════════════════════════════════════
+

@@ -209,12 +209,8 @@
 
   async function main() {
     // Step 1: Like
-    console.log('👍 Starting like process...');
     for (let i = 0; i < 6; i++) {
-      if (likePost()) {
-        console.log('✅ Post liked successfully');
-        break;
-      }
+      if (likePost()) break;
       await sleep(800);
       window.scrollBy(0, 200);
     }
@@ -224,11 +220,7 @@
     const postText = extractPostText();
     console.log('📝 Extracted post text:', postText.slice(0, 100));
 
-    // Step 3: Get current post URL
-    const postLink = window.location.href;
-    console.log('🔗 Post URL:', postLink);
-
-    // Step 4: Ask background to generate a comment
+    // Step 3: Ask background to generate a comment
     let comment = '';
     try {
       const resp = await sendMessageAsync({ action: 'generateCommentForPost', postText });
@@ -239,32 +231,87 @@
     }
 
     if (!comment) {
-      console.log('⏭️ No comment generated, completing task...');
+      console.log('⏭️ No comment generated, opening author profile...');
+      const authorProfileUrl = findAuthorProfileUrl();
+      console.log('🔗 Found author profile URL:', authorProfileUrl);
+      if (authorProfileUrl) {
+        await sendMessageAsync({ action: 'openAuthorProfile', profileUrl: authorProfileUrl });
+        return; // background will handle profile, close this tab, and continue
+      }
       await sleep(500);
       chrome.runtime.sendMessage({ action: 'linkedinTaskComplete' });
       return;
     }
 
-    // Step 5: Add comment to Google Sheet (instead of posting on LinkedIn)
-    console.log('📊 Adding comment to Google Sheet...');
-    try {
-      const sheetResp = await sendMessageAsync({ 
-        action: 'addCommentToSheet', 
-        postLink: postLink,
-        comment: comment 
-      });
-      if (sheetResp && sheetResp.ok) {
-        console.log('✅ Successfully added to Google Sheet');
-      } else {
-        console.warn('⚠️ Failed to add to Google Sheet:', sheetResp ? sheetResp.error : 'Unknown error');
-      }
-    } catch (e) {
-      console.error('❌ Error adding to Google Sheet:', e);
-    }
+    // Step 4: Show approval UI
+    console.log('🎯 Showing approval UI');
+    const ui = injectApprovalUI(comment);
 
-    // Step 6: Complete task
-    await sleep(500);
-    chrome.runtime.sendMessage({ action: 'linkedinTaskComplete' });
+    // Step 5: Wire actions
+    ui.onReject(async () => {
+      console.log('🚫 User rejected comment, opening author profile...');
+      ui.destroy();
+      const authorProfileUrl = findAuthorProfileUrl();
+      console.log('🔗 Found author profile URL:', authorProfileUrl);
+      if (authorProfileUrl) {
+        await sendMessageAsync({ action: 'openAuthorProfile', profileUrl: authorProfileUrl });
+        return; // background will handle profile, close this tab, and continue
+      }
+      await sleep(300);
+      chrome.runtime.sendMessage({ action: 'linkedinTaskComplete' });
+    });
+
+    ui.onApprove(async () => {
+      console.log('✅ User approved comment, posting...');
+      try {
+        ensureCommentBox();
+        await sleep(600);
+        const box = getCommentTextarea();
+        if (box) {
+          // Set comment text in contenteditable
+          box.focus();
+          // Clear existing and insert text
+          document.execCommand('selectAll', false, null);
+          document.execCommand('insertText', false, comment);
+          triggerEditorInput(box, comment);
+
+          await sleep(400);
+
+          // Submit comment
+          let submitBtn = findSubmitNearEditor(box) || findSubmitButton();
+          if (submitBtn) {
+            console.log('💬 Clicking comment button');
+            clickLikeHuman(submitBtn);
+          } else {
+            console.log('⌨️ No button found, using Enter key fallback');
+            // Fallback: press Enter in the editor
+            const down = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true });
+            const press = new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true });
+            const up = new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true });
+            box.dispatchEvent(down);
+            box.dispatchEvent(press);
+            box.dispatchEvent(up);
+          }
+          // Give LinkedIn time to post before we close the tab
+          await sleep(2500);
+
+          console.log('💬 Comment posted, opening author profile...');
+          const authorProfileUrl = findAuthorProfileUrl();
+          console.log('🔗 Found author profile URL:', authorProfileUrl);
+          if (authorProfileUrl) {
+            ui.destroy();
+            await sendMessageAsync({ action: 'openAuthorProfile', profileUrl: authorProfileUrl });
+            return; // background will handle profile, close this tab, and continue
+          }
+        }
+      } catch (e) {
+        console.error('❌ Error in approve flow:', e);
+      } finally {
+        ui.destroy();
+        await sleep(500);
+        chrome.runtime.sendMessage({ action: 'linkedinTaskComplete' });
+      }
+    });
   }
 
   function findAuthorProfileUrl() {

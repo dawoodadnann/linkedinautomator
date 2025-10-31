@@ -10,6 +10,8 @@
     "https://www.google.com/*", 
     "https://*.google.com/*",
     "https://www.linkedin.com/*",
-    "https://api.deepseek.com/*"
+    "https://api.deepseek.com/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
   ]
 }

@@ -2,12 +2,6 @@
 
 // Configure a fallback key here if you don't want to use stored key
 const DEFAULT_DEEPSEEK_API_KEY = "sk-eee1fb6f86764537ac4098a6e5bedb42";
-
-// Google Apps Script Web App URL - Deploy the provided script to your Google Sheet
-// Instructions: See the GOOGLE_SHEETS_SETUP.txt file
-// PASTE YOUR WEB APP URL HERE (should look like: https://script.google.com/macros/s/AKfycby.../exec)
-const GOOGLE_SHEETS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyyFPAUL9P7FbuvqvAPcjMmMSzd1SmPhAXQSO8SkhfoZ5gsHDAJN5ExaMnqoNuVgXH7/exec";
-
 let engagementRun = null; // tracks current engagement session
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -71,31 +65,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // --- Add Comment to Google Sheet ---
-  if (message.action === "addCommentToSheet") {
-    const { postLink, comment } = message;
-    addToGoogleSheet(postLink, comment)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((err) => {
-        console.error("❌ Failed to add to Google Sheet:", err);
-        sendResponse({ ok: false, error: String(err && err.message || err) });
-      });
-    
-    // Keep the message channel open for async response
-    return true;
-  }
-
   // --- Content script signals completion for current tab ---
   if (message.action === "linkedinTaskComplete") {
     // Handled per-tab inside processLinkedInPostsSequentially via local listeners
     // Intentionally empty here so the global handler doesn't interfere
   }
 
+  // --- Open author profile and send connect request ---
+  if (message.action === "openAuthorProfile" && message.profileUrl) {
+    // Handled by processLinkedInPostsSequentially listener
+  }
+
   // --- Stop engagement run immediately ---
   if (message.action === "stopEngagement") {
-    stopCurrentEngagement();
+    stopCurrentEngagement(true);
   }
 });
 
@@ -215,12 +198,17 @@ function processLinkedInPostsSequentially(urls) {
     tabUpdateListener: null,
     doneListener: null,
     timeoutHandle: null,
+    profileTabId: null,
+    profileUpdateListener: null,
+    profileDoneListener: null,
+    profileTimeoutHandle: null,
+    logs: [],
   };
 
   const openNextPost = () => {
     if (!engagementRun || engagementRun.cancelled) return;
     if (engagementRun.index >= engagementRun.urls.length) {
-      console.log("✅ Finished processing all LinkedIn posts!");
+      console.log("✅ Finished liking all LinkedIn posts!");
       engagementRun = null;
       return;
     }
@@ -245,7 +233,7 @@ function processLinkedInPostsSequentially(urls) {
             return;
           }
 
-          // Inject the like and comment script after a short delay
+          // Inject the like script after a short delay
           setTimeout(() => {
             chrome.scripting.executeScript(
               {
@@ -260,9 +248,9 @@ function processLinkedInPostsSequentially(urls) {
                 }
 
                 // Wait for content script to signal completion or timeout
-                const timeoutMs = 60000; // 1 minute timeout
+                const timeoutMs = 120000; // 2 minutes timeout
                 let timeoutHandle = setTimeout(() => {
-                  console.warn("⏱️ Timed out waiting for like/comment. Moving on...");
+                  console.warn("⏱️ Timed out waiting for approval/comment. Moving on...");
                   if (engagementRun && engagementRun.tabId === tabId) {
                     chrome.tabs.remove(tabId, () => {
                       if (!engagementRun || engagementRun.cancelled) return;
@@ -287,7 +275,31 @@ function processLinkedInPostsSequentially(urls) {
                     chrome.tabs.remove(tabId, () => {
                       console.log(`✅ Completed post ${engagementRun.index + 1}`);
                       engagementRun.index++;
+                      if (engagementRun.index >= engagementRun.urls.length) finalizeAndDownloadLogs();
                       setTimeout(openNextPost, 2000);
+                    });
+                  }
+
+                  // Content script requests to open author profile and connect
+                  if (msg.action === "openAuthorProfile" && msg.profileUrl) {
+                    chrome.runtime.onMessage.removeListener(doneHandler);
+                    if (engagementRun && engagementRun.timeoutHandle) clearTimeout(engagementRun.timeoutHandle);
+                    if (!engagementRun || engagementRun.cancelled) {
+                      try { chrome.tabs.remove(tabId); } catch (_) {}
+                      return;
+                    }
+                    // Open profile and send connect
+                    openProfileAndConnect(msg.profileUrl, (profile) => {
+                      if (profile && engagementRun) {
+                        addProfileLog(profile);
+                      }
+                      // Close post tab and continue
+                      chrome.tabs.remove(tabId, () => {
+                        console.log(`✅ Completed post + connect ${engagementRun.index + 1}`);
+                        engagementRun.index++;
+                        if (engagementRun.index >= engagementRun.urls.length) finalizeAndDownloadLogs();
+                        setTimeout(openNextPost, 2000);
+                      });
                     });
                   }
                 };
@@ -306,7 +318,7 @@ function processLinkedInPostsSequentially(urls) {
   openNextPost(); // Start sequence
 }
 
-function stopCurrentEngagement() {
+function stopCurrentEngagement(downloadNow) {
   if (!engagementRun) return;
   engagementRun.cancelled = true;
   try {
@@ -319,10 +331,129 @@ function stopCurrentEngagement() {
     if (engagementRun.timeoutHandle) clearTimeout(engagementRun.timeoutHandle);
   } catch (_) {}
   try {
+    if (engagementRun.profileUpdateListener) chrome.tabs.onUpdated.removeListener(engagementRun.profileUpdateListener);
+  } catch (_) {}
+  try {
+    if (engagementRun.profileDoneListener) chrome.runtime.onMessage.removeListener(engagementRun.profileDoneListener);
+  } catch (_) {}
+  try {
+    if (engagementRun.profileTimeoutHandle) clearTimeout(engagementRun.profileTimeoutHandle);
+  } catch (_) {}
+  try {
     if (engagementRun.tabId) chrome.tabs.remove(engagementRun.tabId);
   } catch (_) {}
-  console.log("⏹️ Process stopped by user.");
+  try {
+    if (engagementRun.profileTabId) chrome.tabs.remove(engagementRun.profileTabId);
+  } catch (_) {}
+  console.log("⏹️ Engagement stopped by user.");
+  if (downloadNow) finalizeAndDownloadLogs();
   engagementRun = null;
+}
+
+// --- Open author profile tab and send connection request ---
+function openProfileAndConnect(profileUrl, onComplete) {
+  if (!engagementRun || engagementRun.cancelled) return onComplete && onComplete();
+  console.log(`🔗 Opening profile: ${profileUrl}`);
+  try {
+    chrome.tabs.create({ url: profileUrl, active: true }, (tab) => {
+      if (!engagementRun || engagementRun.cancelled) {
+        try { chrome.tabs.remove(tab.id); } catch (_) {}
+        return onComplete && onComplete();
+      }
+      const pTabId = tab.id;
+      engagementRun.profileTabId = pTabId;
+
+      const updateListener = (updatedTabId, info) => {
+        if (updatedTabId === pTabId && info.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(updateListener);
+
+          setTimeout(() => {
+            chrome.scripting.executeScript(
+              { target: { tabId: pTabId }, files: ["connectContent.js"] },
+              () => {
+                if (chrome.runtime.lastError) {
+                  console.error("❌ Connect script injection failed:", chrome.runtime.lastError.message);
+                  safeCloseProfileAndComplete(onComplete);
+                  return;
+                }
+
+                const timeoutMs = 90000;
+                engagementRun.profileTimeoutHandle = setTimeout(() => {
+                  console.warn("⏱️ Timed out connecting. Moving on...");
+                  safeCloseProfileAndComplete(onComplete);
+                }, timeoutMs);
+
+                const done = (msg, sndr) => {
+                  if (msg && msg.action === "linkedinConnectComplete" && sndr.tab && sndr.tab.id === pTabId) {
+                    chrome.runtime.onMessage.removeListener(done);
+                    if (engagementRun && engagementRun.profileTimeoutHandle) clearTimeout(engagementRun.profileTimeoutHandle);
+                    const profile = msg.profile || null;
+                    console.log(`✅ Connect request sent to: ${profile ? profile.url : profileUrl}`);
+                    safeCloseProfileAndComplete(() => onComplete && onComplete(profile));
+                  }
+                };
+                chrome.runtime.onMessage.addListener(done);
+                engagementRun.profileDoneListener = done;
+              }
+            );
+          }, 2000);
+        }
+      };
+      chrome.tabs.onUpdated.addListener(updateListener);
+      engagementRun.profileUpdateListener = updateListener;
+    });
+  } catch (e) {
+    console.error("Connect flow error:", e);
+    safeCloseProfileAndComplete(onComplete);
+  }
+}
+
+function safeCloseProfileAndComplete(onComplete) {
+  try {
+    if (engagementRun && engagementRun.profileTabId) {
+      const id = engagementRun.profileTabId;
+      engagementRun.profileTabId = null;
+      chrome.tabs.remove(id, () => onComplete && onComplete());
+      return;
+    }
+  } catch (_) {}
+  onComplete && onComplete();
+}
+
+function addProfileLog(profile) {
+  if (!engagementRun) return;
+  try {
+    const entry = {
+      url: profile.url || "",
+      name: (profile.name || "").replace(/\s+/g, " ").trim(),
+      headline: (profile.headline || "").replace(/\s+/g, " ").trim(),
+      status: "connected",
+    };
+    engagementRun.logs.push(entry);
+    console.log(`📝 Logged profile: ${entry.url}`);
+  } catch (_) {}
+}
+
+function finalizeAndDownloadLogs() {
+  if (!engagementRun) return;
+  const logs = engagementRun.logs || [];
+  if (!logs.length) {
+    console.log("No connection requests sent.");
+    return;
+  }
+
+  let csv = "Profile URL,Name,Headline,Status\n";
+  for (const r of logs) {
+    const clean = (s) => '"' + String(s || "").replace(/"/g, '""') + '"';
+    csv += `${clean(r.url)},${clean(r.name)},${clean(r.headline)},${clean(r.status)}\n`;
+  }
+  try {
+    const dataUrl = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    chrome.downloads.download({ url: dataUrl, filename: "linkedin_connection_requests.csv", saveAs: false });
+    console.log(`✅ Downloaded ${logs.length} connection requests`);
+  } catch (e) {
+    console.error("Failed to download CSV:", e);
+  }
 }
 
 // --- DeepSeek integration ---
@@ -384,46 +515,5 @@ async function getDeepseekApiKey() {
     return stored || DEFAULT_DEEPSEEK_API_KEY;
   } catch (_) {
     return DEFAULT_DEEPSEEK_API_KEY;
-  }
-}
-
-// --- Google Sheets Integration ---
-async function addToGoogleSheet(postLink, comment) {
-  console.log(`🔧 DEBUG: addToGoogleSheet called`);
-  console.log(`🔧 DEBUG: Web App URL configured: ${GOOGLE_SHEETS_WEB_APP_URL}`);
-  console.log(`🔧 DEBUG: Post Link: ${postLink}`);
-  console.log(`🔧 DEBUG: Comment: ${comment}`);
-  
-  if (!GOOGLE_SHEETS_WEB_APP_URL || GOOGLE_SHEETS_WEB_APP_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE" || GOOGLE_SHEETS_WEB_APP_URL === "PASTE_YOUR_WEB_APP_URL_HERE") {
-    const error = "Google Sheets Web App URL not configured. Please set GOOGLE_SHEETS_WEB_APP_URL in background.js";
-    console.error(`❌ ${error}`);
-    throw new Error(error);
-  }
-
-  const data = {
-    postLink: postLink || "",
-    comment: comment || ""
-  };
-
-  console.log(`📊 Adding to Google Sheet: ${postLink}`);
-  console.log(`📊 Data being sent:`, JSON.stringify(data));
-
-  try {
-    const response = await fetch(GOOGLE_SHEETS_WEB_APP_URL, {
-      method: "POST",
-      mode: "no-cors", // Google Apps Script Web Apps require no-cors mode
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(data)
-    });
-
-    // Note: no-cors mode means we can't read the response, but the request will go through
-    console.log(`✅ Sent data to Google Sheet successfully`);
-    console.log(`📊 Response status (limited due to no-cors):`, response.type);
-    return true;
-  } catch (error) {
-    console.error(`❌ Error sending to Google Sheet:`, error);
-    throw error;
   }
 }
